@@ -91,7 +91,6 @@ psutil==6.1.0
 pure_eval==0.2.3
 pyarrow==18.0.0
 pycparser==2.22
-pydeck==0.9.1
 pywin32==308
 pywin32-ctypes==0.2.3
 pywinpty==2.0.14
