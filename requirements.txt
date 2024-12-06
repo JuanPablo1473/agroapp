@@ -94,7 +94,6 @@ pycparser==2.22
 pydeck==0.9.1
 Pygments==2.18.0
 pyinstaller==6.11.1
-pyinstaller-hooks-contrib==2024.10
 pywin32==308
 pywin32-ctypes==0.2.3
 pywinpty==2.0.14
