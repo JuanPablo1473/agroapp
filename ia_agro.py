@@ -1,5 +1,4 @@
 import requests
-import geocoder
 import datetime
 import pytz
 from flask import Flask, render_template_string
@@ -37,45 +36,7 @@ plantios = [
         "mercado_local": "Milho verde, ração animal",
         "epoca_ano": "Primavera"
     },
-    {
-        "nome": "Feijão",
-        "descricao": "Resistente a pragas comuns",
-        "ciclo": "2-4 meses",
-        "tipo_solo": "Fértil e bem drenado",
-        "necessidade_irrigacao": "Média",
-        "clima_ideal": "Tropical - 25.0°C",
-        "frequencia_adubacao": "A cada 45 dias",
-        "pragas_comuns": "Percevejo-marrom",
-        "producao_estimada": 1500,  # em kg/ha
-        "mercado_local": "Consumo doméstico, comercialização",
-        "epoca_ano": "Primavera"
-    },
-    {
-        "nome": "Arroz",
-        "descricao": "Necessita de muita água",
-        "ciclo": "4-6 meses",
-        "tipo_solo": "Solo inundável",
-        "necessidade_irrigacao": "Alta",
-        "clima_ideal": "Quente e úmido - 30.0°C",
-        "frequencia_adubacao": "A cada 30 dias",
-        "pragas_comuns": "Cigarrinha-do-arroz",
-        "producao_estimada": 8000,  # em kg/ha
-        "mercado_local": "Comércio de grãos, consumo interno",
-        "epoca_ano": "Verão"
-    },
-    {
-        "nome": "Café",
-        "descricao": "Planta perene e de clima tropical",
-        "ciclo": "2-3 anos (para colheita)",
-        "tipo_solo": "Fértil, bem drenado",
-        "necessidade_irrigacao": "Moderada",
-        "clima_ideal": "Tropical e subtropical - 22.0°C",
-        "frequencia_adubacao": "Anual",
-        "pragas_comuns": "Broca do café",
-        "producao_estimada": 1000,  # em kg/ha (após 2 anos)
-        "mercado_local": "Café comercial",
-        "epoca_ano": "Primavera"
-    }
+    # Adicione outros dados de plantio conforme necessário
 ]
 
 # Função para determinar a estação do ano
@@ -116,57 +77,56 @@ def recomendar_plantio(temperatura_atual, umidade_atual):
     
     return melhor_recomendacao, maior_acuracia
 
-# Função para obter a localização atual (latitude e longitude)
+# Função para obter a localização de Jequié, Bahia, Brasil
 def obter_localizacao():
-    g = geocoder.ip('me')
+    # Definindo a cidade de Jequié diretamente
+    cidade = "Jequié"
+    estado = "BA"
+    pais = "BR"
     
-    if g.latlng:
-        latitude = g.latlng[0]
-        longitude = g.latlng[1]
+    # Usando as coordenadas de Jequié, Bahia (aproximadamente)
+    latitude = -13.291
+    longitude = -40.070
+    
+    url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API_KEY}&units=metric'
+    resposta = requests.get(url)
+    dados = resposta.json()
+    
+    if dados and isinstance(dados, dict):
+        temperatura = dados['main']['temp']
+        umidade = dados['main']['humidity']
+        descricao = dados['weather'][0]['description']
+        descricao_traduzida = {
+            'clear sky': 'Céu limpo',
+            'few clouds': 'Poucas nuvens',
+            'scattered clouds': 'Nuvens dispersas',
+            'broken clouds': 'Nuvens quebradas',
+            'shower rain': 'Chuva forte',
+            'rain': 'Chuva',
+            'thunderstorm': 'Tempestade',
+            'snow': 'Neve',
+            'mist': 'Névoa',
+            'overcast clouds': 'Nuvens nubladas'
+        }
+        descricao = descricao_traduzida.get(descricao, descricao)
         
-        url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API_KEY}&units=metric'
-        resposta = requests.get(url)
-        dados = resposta.json()
+        chuva = dados.get('rain', {}).get('1h', 0)
+        sol_unix = dados['sys']['sunrise']
+        sol = datetime.datetime.fromtimestamp(sol_unix, pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
         
-        if dados and isinstance(dados, dict):
-            cidade = dados['name']
-            pais = dados['sys']['country']
-            temperatura = dados['main']['temp']
-            umidade = dados['main']['humidity']
-            descricao = dados['weather'][0]['description']
-            descricao_traduzida = {
-                'clear sky': 'Céu limpo',
-                'few clouds': 'Poucas nuvens',
-                'scattered clouds': 'Nuvens dispersas',
-                'broken clouds': 'Nuvens quebradas',
-                'shower rain': 'Chuva forte',
-                'rain': 'Chuva',
-                'thunderstorm': 'Tempestade',
-                'snow': 'Neve',
-                'mist': 'Névoa',
-                'overcast clouds': 'Nuvens nubladas'
-            }
-            descricao = descricao_traduzida.get(descricao, descricao)
-            
-            chuva = dados.get('rain', {}).get('1h', 0)
-            sol_unix = dados['sys']['sunrise']
-            sol = datetime.datetime.fromtimestamp(sol_unix, pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
-            
-            return {
-                'cidade': cidade,
-                'pais': pais,
-                'temperatura': temperatura,
-                'umidade': umidade,
-                'descricao': descricao,
-                'chuva': chuva,
-                'sol': sol,
-                'latitude': latitude,
-                'longitude': longitude
-            }
-        else:
-            return {'erro': 'Não foi possível obter dados meteorológicos'}
+        return {
+            'cidade': cidade,
+            'pais': pais,
+            'temperatura': temperatura,
+            'umidade': umidade,
+            'descricao': descricao,
+            'chuva': chuva,
+            'sol': sol,
+            'latitude': latitude,
+            'longitude': longitude
+        }
     else:
-        return {'erro': 'Não foi possível determinar a localização'}
+        return {'erro': 'Não foi possível obter dados meteorológicos'}
 
 # Página inicial
 @app.route('/')
