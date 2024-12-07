@@ -1,93 +1,212 @@
-import pandas as pd
+import requests
+import geocoder
+import datetime
+import pytz
 from flask import Flask, render_template_string
-from datetime import datetime
-import nest_asyncio
 
-# Resolve conflitos do loop do Jupyter
-nest_asyncio.apply()
-
-# Inicializando o Flask
 app = Flask(__name__)
 
-# Dados de exemplo para o plantio
-dados_plantio = pd.DataFrame({
-    'Tipo de Plantação': ['Mandioca', 'Milho', 'Feijão', 'Cacau', 'Abacaxi', 'Mamão', 'Coco', 'Umbu', 'Caju', 'Manga', 'Coentro', 'Alface', 'Cebola', 'Cana-de-açúcar'],
-    'Ciclo de Cultivo': ['8-18 meses', '90 dias', '70-90 dias', '18-24 meses', '12-18 meses', '9-12 meses', '12-14 meses', '5-6 meses', '5-6 meses', '3-6 meses', '30-45 dias', '30-50 dias', '90-120 dias', '12-18 meses'],
-    'Clima Ideal': ['Quente e seco', 'Quente com chuva', 'Quente com chuva', 'Quente e úmido', 'Quente e seco', 'Quente e úmido', 'Quente e úmido', 'Semiárido', 'Semiárido', 'Quente e seco', 'Quente com irrigação', 'Quente com irrigação', 'Quente com irrigação', 'Quente e úmido'],
-    'Período de Plantio': ['Ano todo', 'Outubro a Dezembro', 'Março a Maio', 'Ano todo', 'Março a Julho', 'Ano todo', 'Ano todo', 'Janeiro a Abril', 'Janeiro a Abril', 'Janeiro a Abril', 'Ano todo', 'Ano todo', 'Ano todo', 'Março a Junho'],
-    'Tipo de Solo': ['Argiloso ou arenoso', 'Argiloso', 'Arenoso', 'Argiloso e fértil', 'Arenoso e drenado', 'Bem drenado', 'Argiloso ou arenoso', 'Rochoso ou arenoso', 'Arenoso', 'Arenoso ou argiloso', 'Fértil', 'Fértil', 'Fértil', 'Argiloso'],
-    'Necessidade de Irrigação': ['Baixa', 'Moderada', 'Moderada', 'Alta', 'Moderada', 'Alta', 'Alta', 'Baixa', 'Baixa', 'Baixa', 'Moderada', 'Moderada', 'Moderada', 'Alta'],
-    'Frequência de Adubação': ['Anual', 'Mensal', 'Mensal', 'Anual', 'Mensal', 'Mensal', 'Anual', 'Mensal', 'Mensal', 'Mensal', 'Semanal', 'Semanal', 'Mensal', 'Anual'],
-    'Pragas Comuns': ['Broca-da-mandioca', 'Lagarta-do-cartucho', 'Mosca-branca', 'Vassoura-de-bruxa', 'Ácaros', 'Pulgões', 'Brocas', 'Mosca-da-fruta', 'Mosca-da-fruta', 'Mosca-da-fruta', 'Pulgões', 'Lesmas', 'Tripes', 'Cigarrinha'],
-    'Produção Estimada (kg/ha)': ['20.000', '2.500-6.000', '1.200-2.000', '1.500-2.500', '30.000-45.000', '40.000-50.000', '25.000-35.000', '1.000-2.000', '1.000-2.000', '10.000-20.000', '15.000-20.000', '10.000-15.000', '20.000-25.000', '50.000-60.000'],
-    'Mercado Local/Venda': ['Farinha e consumo local', 'Feiras e ração animal', 'Feiras locais', 'Chocolate e cosméticos', 'Mercado nacional', 'Consumo e exportação', 'Mercado local', 'Polpa e consumo', 'Polpa e consumo', 'Consumo in natura', 'Feiras locais', 'Feiras locais', 'Feiras locais', 'Rapadura e caldo'],
-    'Observações': ['Tolerante à seca', 'Prefere solo drenado', 'Boa para safras curtas', 'Requer sombra', 'Alta resistência climática', 'Necessita irrigação', 'Boa tolerância à salinidade', 'Produção sazonal', 'Produção sazonal', 'Muito cultivada na região', 'Fácil cultivo', 'Fácil cultivo', 'Requer solo bem preparado', 'Alta demanda de água'],
-    'Acuracidade (%)': [95, 85, 80, 70, 90, 85, 80, 60, 60, 75, 85, 80, 70, 90]
-})
+# Sua chave da API do OpenWeather
+API_KEY = 'e8c29d83306d3ec8eb601348ca9ffe36'
 
-# Função para determinar a temperatura ideal baseada no clima
-def calcular_media_clima(clima):
-    clima_para_temperatura = {
-        'Quente e seco': '25C-35C',
-        'Moderado': '15C-25C',
-        'Frio': '5C-15C',
-        'Tropical': '20C-30C',
-        'Quente com chuva': '20C-30C',
-        'Quente e úmido': '20C-30C'
+# Dados de plantio com mais opções de cultivo
+plantios = [
+    {
+        "nome": "Mandioca",
+        "descricao": "Tolerante à seca",
+        "ciclo": "8-18 meses",
+        "tipo_solo": "Argiloso ou arenoso",
+        "necessidade_irrigacao": "Baixa",
+        "clima_ideal": "Quente e seco - 30.0°C",
+        "frequencia_adubacao": "Anual",
+        "pragas_comuns": "Broca-da-mandioca",
+        "producao_estimada": 20000,  # em kg/ha
+        "mercado_local": "Farinha e consumo local",
+        "epoca_ano": "Verão"
+    },
+    {
+        "nome": "Milho",
+        "descricao": "Resistente a solos ácidos",
+        "ciclo": "3-4 meses",
+        "tipo_solo": "Fértil, bem drenado",
+        "necessidade_irrigacao": "Alta",
+        "clima_ideal": "Quente e úmido - 25.0°C",
+        "frequencia_adubacao": "A cada 30 dias",
+        "pragas_comuns": "Lagarta-do-cartucho",
+        "producao_estimada": 12000,  # em kg/ha
+        "mercado_local": "Milho verde, ração animal",
+        "epoca_ano": "Primavera"
+    },
+    {
+        "nome": "Feijão",
+        "descricao": "Resistente a pragas comuns",
+        "ciclo": "2-4 meses",
+        "tipo_solo": "Fértil e bem drenado",
+        "necessidade_irrigacao": "Média",
+        "clima_ideal": "Tropical - 25.0°C",
+        "frequencia_adubacao": "A cada 45 dias",
+        "pragas_comuns": "Percevejo-marrom",
+        "producao_estimada": 1500,  # em kg/ha
+        "mercado_local": "Consumo doméstico, comercialização",
+        "epoca_ano": "Primavera"
+    },
+    {
+        "nome": "Arroz",
+        "descricao": "Necessita de muita água",
+        "ciclo": "4-6 meses",
+        "tipo_solo": "Solo inundável",
+        "necessidade_irrigacao": "Alta",
+        "clima_ideal": "Quente e úmido - 30.0°C",
+        "frequencia_adubacao": "A cada 30 dias",
+        "pragas_comuns": "Cigarrinha-do-arroz",
+        "producao_estimada": 8000,  # em kg/ha
+        "mercado_local": "Comércio de grãos, consumo interno",
+        "epoca_ano": "Verão"
+    },
+    {
+        "nome": "Café",
+        "descricao": "Planta perene e de clima tropical",
+        "ciclo": "2-3 anos (para colheita)",
+        "tipo_solo": "Fértil, bem drenado",
+        "necessidade_irrigacao": "Moderada",
+        "clima_ideal": "Tropical e subtropical - 22.0°C",
+        "frequencia_adubacao": "Anual",
+        "pragas_comuns": "Broca do café",
+        "producao_estimada": 1000,  # em kg/ha (após 2 anos)
+        "mercado_local": "Café comercial",
+        "epoca_ano": "Primavera"
     }
+]
 
-    if clima in clima_para_temperatura:
-        temperatura = clima_para_temperatura[clima]
-        temperaturas = temperatura.split('-')
-        return (float(temperaturas[0].replace('C', '')) + float(temperaturas[1].replace('C', ''))) / 2
-    return None
-
-# Função para determinar a estação
-def determinar_estacao(mes_atual):
-    if mes_atual in [12, 1, 2]:
+# Função para determinar a estação do ano
+def determinar_estacao(mes):
+    if mes in [12, 1, 2]:
         return "Verão"
-    elif mes_atual in [3, 4, 5]:
+    elif mes in [3, 4, 5]:
         return "Outono"
-    elif mes_atual in [6, 7, 8]:
+    elif mes in [6, 7, 8]:
         return "Inverno"
-    else:
+    elif mes in [9, 10, 11]:
         return "Primavera"
 
-# Rota principal
-@app.route("/")
-def index():
-    # Obter recomendação com base no tipo de plantação
-    recomendado_plantio = dados_plantio[dados_plantio['Tipo de Plantação'] == "Mandioca"].iloc[0]
+# Função para calcular a acurácia da recomendação
+def calcular_acuracia(clima_ideal, temperatura_atual, umidade_atual):
+    temperatura_ideal = float(clima_ideal.split(' - ')[1].replace('°C', ''))
+    erro_temperatura = abs(temperatura_atual - temperatura_ideal)
+    acuracia_temperatura = max(0, 100 - erro_temperatura)
     
-    # Determinar a estação atual
-    mes_atual = datetime.now().month
-    estacao_atual = determinar_estacao(mes_atual)
+    umidade_ideal = 50  # Valor fixo para exemplo
+    erro_umidade = abs(umidade_atual - umidade_ideal)
+    acuracia_umidade = max(0, 100 - erro_umidade)
     
-    # Data Atual
-    data_atual = datetime.now().strftime("%d/%m/%Y")
-    
-    # Modelo de recomendação
-    recomendacao_modelo = "Mandioca"
-    
-    # Gerar a recomendação do usuário
-    recomendacao_usuario = f"""
-    <h1>Recomendação de Plantio</h1>
-    <p><b>Tipo:</b> {recomendacao_modelo}</p>
-    <p><b>Descrição:</b> {recomendado_plantio['Observações']}</p>
-    <p><b>Ciclo de Cultivo:</b> {recomendado_plantio['Ciclo de Cultivo']}</p>
-    <p><b>Tipo de Solo:</b> {recomendado_plantio['Tipo de Solo']}</p>
-    <p><b>Necessidade de Irrigação:</b> {recomendado_plantio['Necessidade de Irrigação']}</p>
-    <p><b>Clima Ideal:</b> {recomendado_plantio['Clima Ideal']} - {calcular_media_clima(recomendado_plantio['Clima Ideal'])}°C</p>
-    <p><b>Frequência de Adubação:</b> {recomendado_plantio['Frequência de Adubação']}</p>
-    <p><b>Pragas Comuns:</b> {recomendado_plantio['Pragas Comuns']}</p>
-    <p><b>Produção Estimada:</b> {recomendado_plantio['Produção Estimada (kg/ha)']}</p>
-    <p><b>Mercado Local:</b> {recomendado_plantio['Mercado Local/Venda']}</p>
-    <p><b>Época do Ano:</b> {estacao_atual}</p>
-    <p><b>Data Atual:</b> {data_atual}</p>
-    <p><b>Acuracidade da Recomendação:</b> {recomendado_plantio['Acuracidade (%)']}%</p>
-    """
-    
-    return render_template_string(recomendacao_usuario)
+    acuracia_final = (acuracia_temperatura + acuracia_umidade) / 2
+    return acuracia_final
 
-if __name__ == "__main__":
+# Função para determinar a melhor recomendação de plantio com base nas condições locais
+def recomendar_plantio(temperatura_atual, umidade_atual):
+    melhor_recomendacao = None
+    maior_acuracia = 0
+    
+    for plantio in plantios:
+        acuracia = calcular_acuracia(plantio['clima_ideal'], temperatura_atual, umidade_atual)
+        
+        if acuracia > maior_acuracia:
+            maior_acuracia = acuracia
+            melhor_recomendacao = plantio
+    
+    return melhor_recomendacao, maior_acuracia
+
+# Função para obter a localização atual (latitude e longitude)
+def obter_localizacao():
+    g = geocoder.ip('me')
+    
+    if g.latlng:
+        latitude = g.latlng[0]
+        longitude = g.latlng[1]
+        
+        url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={API_KEY}&units=metric'
+        resposta = requests.get(url)
+        dados = resposta.json()
+        
+        if dados and isinstance(dados, dict):
+            cidade = dados['name']
+            pais = dados['sys']['country']
+            temperatura = dados['main']['temp']
+            umidade = dados['main']['humidity']
+            descricao = dados['weather'][0]['description']
+            descricao_traduzida = {
+                'clear sky': 'Céu limpo',
+                'few clouds': 'Poucas nuvens',
+                'scattered clouds': 'Nuvens dispersas',
+                'broken clouds': 'Nuvens quebradas',
+                'shower rain': 'Chuva forte',
+                'rain': 'Chuva',
+                'thunderstorm': 'Tempestade',
+                'snow': 'Neve',
+                'mist': 'Névoa',
+                'overcast clouds': 'Nuvens nubladas'
+            }
+            descricao = descricao_traduzida.get(descricao, descricao)
+            
+            chuva = dados.get('rain', {}).get('1h', 0)
+            sol_unix = dados['sys']['sunrise']
+            sol = datetime.datetime.fromtimestamp(sol_unix, pytz.timezone('America/Sao_Paulo')).strftime('%H:%M:%S')
+            
+            return {
+                'cidade': cidade,
+                'pais': pais,
+                'temperatura': temperatura,
+                'umidade': umidade,
+                'descricao': descricao,
+                'chuva': chuva,
+                'sol': sol,
+                'latitude': latitude,
+                'longitude': longitude
+            }
+        else:
+            return {'erro': 'Não foi possível obter dados meteorológicos'}
+    else:
+        return {'erro': 'Não foi possível determinar a localização'}
+
+# Página inicial
+@app.route('/')
+def index():
+    fuso_horario = pytz.timezone('America/Sao_Paulo')
+    data_atual = datetime.datetime.now(fuso_horario).strftime("%d/%m/%Y %H:%M:%S")
+    mes_atual = datetime.datetime.now(fuso_horario).month
+    estacao_atual = determinar_estacao(mes_atual)
+
+    dados_localizacao = obter_localizacao()
+
+    if 'erro' in dados_localizacao:
+        return render_template_string(f"<h1>{dados_localizacao['erro']}</h1>")
+    
+    melhor_plantio, acuracia = recomendar_plantio(dados_localizacao['temperatura'], dados_localizacao['umidade'])
+    
+    recomendacoes_html = f"""
+    <h2>Recomendação de Plantio</h2>
+    <h3>Plantio Recomendado: {melhor_plantio['nome']}</h3>
+    <p><strong>Descrição:</strong> {melhor_plantio['descricao']}</p>
+    <p><strong>Ciclo de Cultivo:</strong> {melhor_plantio['ciclo']}</p>
+    <p><strong>Tipo de Solo:</strong> {melhor_plantio['tipo_solo']}</p>
+    <p><strong>Necessidade de Irrigação:</strong> {melhor_plantio['necessidade_irrigacao']}</p>
+    <p><strong>Clima Ideal:</strong> {melhor_plantio['clima_ideal']}</p>
+    <p><strong>Frequência de Adubação:</strong> {melhor_plantio['frequencia_adubacao']}</p>
+    <p><strong>Pragas Comuns:</strong> {melhor_plantio['pragas_comuns']}</p>
+    <p><strong>Produção Estimada:</strong> {melhor_plantio['producao_estimada']} kg/ha</p>
+    <p><strong>Mercado Local:</strong> {melhor_plantio['mercado_local']}</p>
+    <p><strong>Estação do Ano:</strong> {estacao_atual}</p>
+    <p><strong>Acurácia da Recomendação:</strong> {acuracia:.2f}%</p>
+    <h4>Dados Locais</h4>
+    <p><strong>Cidade:</strong> {dados_localizacao['cidade']}, {dados_localizacao['pais']}</p>
+    <p><strong>Temperatura:</strong> {dados_localizacao['temperatura']}°C</p>
+    <p><strong>Umidade:</strong> {dados_localizacao['umidade']}%</p>
+    <p><strong>Descrição do Clima:</strong> {dados_localizacao['descricao']}</p>
+    <p><strong>Chuva:</strong> {dados_localizacao['chuva']} mm/hora</p>
+    <p><strong>Sol:</strong> {dados_localizacao['sol']}</p>
+    <p><strong>Data e Hora:</strong> {data_atual}</p>
+    """
+    return render_template_string(recomendacoes_html)
+
+if __name__ == '__main__':
     app.run(debug=True)
